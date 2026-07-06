@@ -1,0 +1,1037 @@
+evl protocal-
+
+"
+# Exact evaluation protocol for ICDAR2015, Total-Text, and CTW1500
+
+The safest paper-ready setup is this:
+
+| Dataset        | Main modern paper protocol                                     | Lexicon protocol            | Extra official/legacy protocol to keep                                                        |
+| -------------- | -------------------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------- |
+| **ICDAR2015**  | Detection Hmean + End-to-End Hmean with polygon/quad IoU > 0.5 | **Strong / Weak / Generic** | RRC official server-style result if submitting                                                |
+| **Total-Text** | Detection Hmean + End-to-End Hmean with polygon IoU > 0.5      | **None / Full**             | Original Total-Text `Eval.m` detection protocol using Wolf-Jolion-style area recall/precision |
+| **CTW1500**    | Detection Hmean + End-to-End Hmean with polygon IoU > 0.5      | **None / Full**             | Optional TIoU as diagnostic, not headline                                                     |
+
+The modern text-spotting literature has mostly standardized around **IoU > 0.5 matching + Precision / Recall / Hmean**, while older official scripts for Total-Text and ICDAR-style DetEval use area-recall/area-precision style matching. Recent papers such as **SwinTextSpotter v2**, **DeepSolo++**, and **LSGSpotter** report the modern protocol: ICDAR2015 with S/W/G lexicons, and Total-Text/CTW1500 with None/Full lexicons. ([arXiv][1])
+
+---
+
+# 1. Universal formulas you should use
+
+## 1.1 Detection matching
+
+For every ground-truth text instance (G_i) and predicted text instance (D_j), compute polygon IoU:
+
+[
+IoU(G_i,D_j)=\frac{|G_i \cap D_j|}{|G_i \cup D_j|}
+]
+
+A detection is counted as correct if:
+
+[
+IoU(G_i,D_j) > 0.5
+]
+
+and both the GT and prediction have not already been matched.
+
+Modern public text-spotting evaluators used by ABCNet/AdelaiDet set `IOU_CONSTRAINT = 0.5`, ignore `###` regions, and remove predictions that overlap ignored GT regions too strongly. ([GitHub][2])
+
+Then:
+
+[
+TP_{det} = \text{number of matched care GT-pred pairs}
+]
+
+[
+FP_{det} = N_{care_pred} - TP_{det}
+]
+
+[
+FN_{det} = N_{care_gt} - TP_{det}
+]
+
+[
+Precision_{det} = \frac{TP_{det}}{TP_{det}+FP_{det}}
+]
+
+[
+Recall_{det} = \frac{TP_{det}}{TP_{det}+FN_{det}}
+]
+
+[
+Hmean_{det} = \frac{2 \cdot Precision_{det} \cdot Recall_{det}}{Precision_{det}+Recall_{det}}
+]
+
+This is the detection score reported as **P / R / H** or just **Det-Hmean** in most current papers.
+
+---
+
+## 1.2 End-to-end text spotting
+
+For end-to-end spotting, a prediction is correct only if both localization and recognition are correct:
+
+[
+TP_{e2e} = \sum_{i,j} \mathbf{1}
+\left[
+IoU(G_i,D_j)>0.5
+;\land;
+Norm(t_i)=Norm(\hat{t}_j)
+\right]
+]
+
+where:
+
+* (t_i) is the ground-truth transcription.
+* (\hat{t}_j) is the predicted transcription.
+* `Norm()` means the evaluator’s text normalization rule.
+
+Then:
+
+[
+Precision_{e2e} = \frac{TP_{e2e}}{N_{care_pred}}
+]
+
+[
+Recall_{e2e} = \frac{TP_{e2e}}{N_{care_gt}}
+]
+
+[
+Hmean_{e2e} = \frac{2 \cdot Precision_{e2e} \cdot Recall_{e2e}}{Precision_{e2e}+Recall_{e2e}}
+]
+
+For modern scene text spotting, the recognition match is normally **exact string match after evaluator normalization**. Many public scripts uppercase both GT and prediction, strip special punctuation according to predefined rules, and treat `###` as “do not care.” The AdelaiDet text-spotting evaluator explicitly handles transcription matching, ignored GT, special characters, word spotting filters, and Hmean computation. ([GitHub][2])
+
+---
+
+## 1.3 Lexicon correction
+
+For lexicon-based evaluation, the model’s raw predicted word/string is corrected to the closest lexicon entry before matching:
+
+[
+\hat{t}^{lex} = \arg\min_{w \in L} EditDistance(\hat{t}, w)
+]
+
+Then the evaluator compares:
+
+[
+Norm(\hat{t}^{lex}) = Norm(t)
+]
+
+For **None / lexicon-free**, no correction is applied.
+
+For **Full**, the lexicon contains all words appearing in the test set.
+
+For **ICDAR2015**, current papers use:
+
+* **S**, Strong lexicon
+* **W**, Weak lexicon
+* **G**, Generic lexicon
+
+Recent papers continue using this split: ICDAR2015 is reported under **S/W/G**, while Total-Text and CTW1500 are reported under **None/Full**. ([arXiv][1])
+
+---
+
+# 2. ICDAR2015 protocol
+
+## 2.1 Dataset nature
+
+ICDAR2015 Challenge 4 is the **Incidental Scene Text** benchmark. It evaluates scene text detection and recognition under difficult natural conditions such as blur, perspective distortion, low resolution, and incidental capture. The official ICDAR2015 competition paper describes it as a benchmark for detection and recognition of incidental text. ([arXiv][3])
+
+Modern papers usually describe ICDAR2015 as:
+
+* **1000 training images**
+* **500 testing images**
+* **word-level quadrilateral annotations**
+* mostly oriented/regular scene text, less curved than Total-Text/CTW1500
+
+SwinTextSpotter v2 and OmniParser-style papers use ICDAR2015 as a regular/multi-oriented scene text spotting benchmark with quadrilateral annotations. ([arXiv][1])
+
+---
+
+## 2.2 Ground-truth format
+
+For ICDAR2015, each GT line is usually:
+
+```txt
+x1,y1,x2,y2,x3,y3,x4,y4,transcription
+```
+
+Example:
+
+```txt
+377,117,463,117,465,130,378,130,CAUTION
+```
+
+For ignored text:
+
+```txt
+377,117,463,117,465,130,378,130,###
+```
+
+Your prediction file should use the same quadrilateral format:
+
+```txt
+x1,y1,x2,y2,x3,y3,x4,y4,predicted_text
+```
+
+For detection-only evaluation, the transcription may be omitted depending on the evaluator.
+
+AdelaiDet’s ICDAR2015 evaluator expects files named like `gt_img_1.txt` and `res_img_1.txt`, uses `IOU_CONSTRAINT = 0.5`, and contains ICDAR-specific punctuation and transcription handling. ([GitHub][4])
+
+---
+
+## 2.3 Detection evaluation for ICDAR2015
+
+Use the modern protocol for paper comparison:
+
+[
+IoU(G_i,D_j) > 0.5
+]
+
+Then report:
+
+[
+Precision, Recall, Hmean
+]
+
+This is the detection metric used in recent ICDAR2015 text spotting tables.
+
+Recommended output table:
+
+| Metric              | Value |
+| ------------------- | ----: |
+| Detection Precision |     P |
+| Detection Recall    |     R |
+| Detection Hmean     |     H |
+
+If you also want to be maximally safe, submit final results to the RRC evaluation server or run an RRC-compatible script, but your paper comparison should still include the modern IoU>0.5 Hmean used by recent papers.
+
+---
+
+## 2.4 End-to-end evaluation for ICDAR2015
+
+For ICDAR2015, report end-to-end results under:
+
+| Lexicon     | Meaning                                                                                                                |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **Strong**  | Per-image lexicon, usually around 100 candidate words for that image                                                   |
+| **Weak**    | Dataset-level lexicon, commonly all words from the test set or train/test set depending on the specific release/script |
+| **Generic** | Large generic lexicon, commonly around 90k words                                                                       |
+
+Modern papers abbreviate these as:
+
+```txt
+S / W / G
+```
+
+So your ICDAR2015 end-to-end table should look like:
+
+| Dataset   | Detection Hmean | E2E Strong | E2E Weak | E2E Generic |
+| --------- | --------------: | ---------: | -------: | ----------: |
+| ICDAR2015 |               H |          S |        W |           G |
+
+ABCNet/AdelaiDet exposes this directly through `EVAL_TYPE`: `3` for Strong, `2` for Weak, and `1` for Generic. ([GitHub][5])
+
+---
+
+## 2.5 Word spotting on ICDAR2015
+
+Some papers also report **word spotting**, which differs from end-to-end recognition.
+
+In word spotting:
+
+* The task is to localize and recognize words from a predefined vocabulary.
+* Short words may be ignored.
+* Words containing special characters may be filtered.
+* Recognition is still exact after normalization/lexicon handling.
+
+If you are not specifically targeting word spotting, make it supplementary. Your main ICDAR2015 table should be **Detection + End-to-End S/W/G**.
+
+---
+
+## 2.6 Current-paper comparison examples
+
+Recent papers report ICDAR2015 in exactly this form.
+
+SwinTextSpotter v2 reports ICDAR2015 end-to-end results under **S/W/G**, with resolution-dependent results such as **89.6 / 84.1 / 79.4** at 1600 resolution and **90.0 / 84.5 / 80.1** at 4000 resolution. ([arXiv][1])
+
+DeepSolo++ also reports ICDAR2015 detection Hmean and end-to-end **S/W/G**; one reported setting reaches detection Hmean around **90.1** and E2E **88.1 / 83.9 / 79.5** with external TextOCR training. ([arXiv][6])
+
+So for your model, the clean ICDAR2015 reporting format is:
+
+```txt
+ICDAR2015:
+Detection: Precision / Recall / Hmean
+End-to-End: Strong / Weak / Generic
+Optional: Word Spotting Strong / Weak / Generic
+```
+
+---
+
+# 3. Total-Text protocol
+
+## 3.1 Dataset nature
+
+Total-Text is designed for arbitrary-shaped text detection and spotting. It contains horizontal, multi-oriented, and curved text instances. The official Total-Text repository describes it as containing **1555 images** with horizontal, multi-oriented, and curved text. ([GitHub][7])
+
+Modern papers normally use the split:
+
+* **1255 training images**
+* **300 testing images**
+* **word-level polygon annotations**
+
+SwinTextSpotter v2 explicitly describes Total-Text as having 1255 train images, 300 test images, and word-level polygon boxes. ([arXiv][1])
+
+---
+
+## 3.2 Ground-truth format
+
+Total-Text uses polygon annotations, not only rectangles.
+
+A GT/prediction line should be treated as:
+
+```txt
+x1,y1,x2,y2,x3,y3,...,xn,yn,transcription
+```
+
+For curved text, (n) can be greater than 4.
+
+Example:
+
+```txt
+120,45,145,40,180,43,210,55,205,80,170,90,130,82,STORE
+```
+
+Ignored text:
+
+```txt
+120,45,145,40,180,43,210,55,205,80,170,90,130,82,###
+```
+
+Do not convert curved polygons to horizontal bounding boxes for evaluation. That will produce wrong IoU and unfair scores.
+
+---
+
+## 3.3 Official original Total-Text detection protocol
+
+The official Total-Text repository includes `Eval.m`, which states that it evaluates Total-Text detection and is based on the Wolf & Jolion method. ([GitHub][8])
+
+The official script computes area recall and area precision using polygon intersections:
+
+[
+\sigma_{ij} = \frac{|G_i \cap D_j|}{|G_i|}
+]
+
+[
+\tau_{ij} = \frac{|G_i \cap D_j|}{|D_j|}
+]
+
+where:
+
+* (\sigma_{ij}) is GT coverage, recall-style.
+* (\tau_{ij}) is detection purity, precision-style.
+
+The official `Eval.m` script sets:
+
+[
+tr = 0.7
+]
+
+[
+tp = 0.6
+]
+
+[
+k_t = 2
+]
+
+[
+fsc_k = 0.8
+]
+
+and then computes final precision, recall, and F-score. ([GitHub][8])
+
+The official F-score is:
+
+[
+F = \frac{2PR}{P+R}
+]
+
+This official Total-Text detection protocol is useful to include in supplementary experiments, especially if you want to show compatibility with the dataset’s original evaluator.
+
+---
+
+## 3.4 Modern Total-Text detection protocol
+
+Current text spotting papers usually report Total-Text detection using:
+
+[
+IoU(G_i,D_j) > 0.5
+]
+
+Then:
+
+[
+Precision, Recall, Hmean
+]
+
+SwinTextSpotter v2 explicitly states that a detection is considered true positive when its IoU with the GT polygon exceeds **0.5**, and then P/R/H are computed. ([arXiv][1])
+
+This is the protocol you should use for your main paper table.
+
+---
+
+## 3.5 Total-Text end-to-end protocol
+
+For Total-Text, report:
+
+| Setting  | Meaning                                           |
+| -------- | ------------------------------------------------- |
+| **None** | Lexicon-free evaluation                           |
+| **Full** | Full lexicon containing all words in the test set |
+
+So your table should be:
+
+| Dataset    | Det-P | Det-R | Det-H | E2E None | E2E Full |
+| ---------- | ----: | ----: | ----: | -------: | -------: |
+| Total-Text |     P |     R |     H |     None |     Full |
+
+The latest/recent papers use the same **None / Full** reporting. LSGSpotter’s 2025 AAAI paper states that “None” represents lexicon-free evaluation and “Full” means all words in the test set are used. ([ojs.aaai.org][9])
+
+---
+
+## 3.6 Current-paper comparison examples
+
+SwinTextSpotter v2 reports Total-Text with detection Hmean and end-to-end **None / Full**. One reported setting with TextOCR training gives detection Hmean around **90.1**, E2E **82.8 None**, and **88.4 Full**. ([arXiv][1])
+
+DeepSolo++ reports Total-Text with detection P/R/H and E2E None/Full; one ViTAEv2-S + TextOCR setting reports detection **92.9 / 87.4 / 90.0**, E2E **83.6 None**, and **89.6 Full**. ([arXiv][6])
+
+LSGSpotter reports modern Total-Text and CTW1500 results using **None / Full**, with its Total-Text None score reported as **81.5** in the shown table. ([ojs.aaai.org][9])
+
+So for your model:
+
+```txt
+Total-Text:
+Detection: Precision / Recall / Hmean
+End-to-End: None / Full
+Optional supplementary: official Total-Text Eval.m P / R / F
+```
+
+---
+
+# 4. CTW1500 protocol
+
+## 4.1 Dataset nature
+
+CTW1500, also called SCUT-CTW1500, is a curved text benchmark. The official repository states:
+
+* **1000 training images**
+* **500 testing images**
+* updated annotations
+* character-point annotations
+* Chinese text is marked as `###` and ignored
+* original detection evaluation script is provided
+* updated detection + end-to-end evaluation script is provided, including Total-Text examples ([GitHub][10])
+
+The older official README also describes SCUT-CTW1500 as a **text-line based** dataset containing both English and Chinese text. ([GitHub][11])
+
+This text-line nature is very important: CTW1500 is not exactly the same as Total-Text. Total-Text is word-level polygon spotting; CTW1500 is usually line-level curved text spotting.
+
+---
+
+## 4.2 Ground-truth format
+
+CTW1500 uses polygon/curve-style annotations. For modern text spotting evaluation, convert each GT and prediction into polygon format:
+
+```txt
+x1,y1,x2,y2,x3,y3,...,xn,yn,transcription
+```
+
+Ignored Chinese/non-care regions:
+
+```txt
+x1,y1,x2,y2,...,xn,yn,###
+```
+
+Because CTW1500 contains long text lines, your recognizer/evaluator must allow longer sequence lengths. A model capped at 25 characters can underperform unfairly on CTW1500. DeepSolo++ explicitly compares different recognition lengths on CTW1500 and reports improved CTW results with longer max recognition length. ([arXiv][6])
+
+---
+
+## 4.3 CTW1500 detection protocol
+
+For modern paper comparison:
+
+[
+IoU(G_i,D_j) > 0.5
+]
+
+Then compute:
+
+[
+Precision, Recall, Hmean
+]
+
+Use polygon IoU, not rectangle IoU.
+
+Recommended table:
+
+| Dataset | Det-P | Det-R | Det-H |
+| ------- | ----: | ----: | ----: |
+| CTW1500 |     P |     R |     H |
+
+---
+
+## 4.4 CTW1500 end-to-end protocol
+
+Report:
+
+| Setting  | Meaning                                           |
+| -------- | ------------------------------------------------- |
+| **None** | Lexicon-free                                      |
+| **Full** | Full lexicon containing all words in the test set |
+
+Final CTW1500 table:
+
+| Dataset | Det-P | Det-R | Det-H | E2E None | E2E Full |
+| ------- | ----: | ----: | ----: | -------: | -------: |
+| CTW1500 |     P |     R |     H |     None |     Full |
+
+Recent CTW1500 papers follow this exact reporting style. LSGSpotter states that None is lexicon-free and Full uses all test-set words, and reports Total-Text and SCUT-CTW1500 under these settings. ([ojs.aaai.org][9])
+
+---
+
+## 4.5 CTW1500 fairness rule with ArT
+
+If you use **ArT** or other external datasets, check overlap carefully. The CTW1500 official README warns that if using ArT for training, CTW1500 test-set images should be removed from ArT to preserve fair benchmarking. ([GitHub][11])
+
+For your paper, always state external data clearly:
+
+```txt
+Training data: Total-Text train + CTW1500 train + ICDAR2015 train
+External pretraining: SynthText / MLT / TextOCR / ArT / none
+ArT overlap removal: yes/no
+```
+
+---
+
+## 4.6 Current-paper comparison examples
+
+SwinTextSpotter v2 reports CTW1500 using detection Hmean and E2E **None / Full**. One setting reports around **89.3 detection Hmean**, **61.3 None**, and **82.0 Full**. ([arXiv][1])
+
+DeepSolo++ reports CTW1500 end-to-end results under None/Full, with one longer-recognition-length setting reaching **64.2 None** and **81.4 Full**. ([arXiv][6])
+
+LSGSpotter 2025 reports **68.9 None** and **84.4 Full** on SCUT-CTW1500 in its table, while again defining None as lexicon-free and Full as all test words. ([ojs.aaai.org][9])
+
+So for your model:
+
+```txt
+CTW1500:
+Detection: Precision / Recall / Hmean
+End-to-End: None / Full
+Important: text-line level, long sequence length, ignore ###
+```
+
+---
+
+# 5. Final protocol you should implement
+
+## 5.1 Data split
+
+Use the official splits only:
+
+| Dataset    | Train | Test | Annotation type          |
+| ---------- | ----: | ---: | ------------------------ |
+| ICDAR2015  |  1000 |  500 | word-level quadrilateral |
+| Total-Text |  1255 |  300 | word-level polygon       |
+| CTW1500    |  1000 |  500 | text-line polygon/curve  |
+
+Total-Text official source describes 1555 images total, while modern papers use 1255/300. CTW1500 official source confirms 1000/500. ([GitHub][7])
+
+---
+
+## 5.2 Prediction export
+
+Export predictions in **original image coordinates**, not resized training coordinates.
+
+For every image, save:
+
+```txt
+x1,y1,x2,y2,...,xn,yn,predicted_text
+```
+
+Rules:
+
+1. ICDAR2015 can use 4-point quadrilaterals.
+2. Total-Text must use polygons.
+3. CTW1500 must use polygons/curved text-line regions.
+4. Keep predictions ordered by confidence if your evaluator uses confidence.
+5. Apply NMS before evaluation to avoid duplicate detections.
+6. Do not output predictions for `###` regions if you can avoid it.
+
+---
+
+## 5.3 Ignore-region handling
+
+For all three datasets:
+
+Ground-truth transcription:
+
+```txt
+###
+```
+
+means “do not care.”
+
+Ignore these GT instances in both detection and recognition scoring.
+
+Also ignore predictions that significantly overlap ignored GT. Modern scripts commonly use:
+
+[
+\frac{|D_j \cap G_{ignore}|}{|D_j|} > 0.5
+]
+
+to remove that prediction from the denominator. AdelaiDet’s evaluator uses `AREA_PRECISION_CONSTRAINT = 0.5` for this style of ignore handling. ([GitHub][2])
+
+---
+
+## 5.4 Detection evaluation
+
+For each dataset:
+
+```txt
+Compute polygon IoU between care GT and care predictions.
+Match if IoU > 0.5.
+Compute TP, FP, FN.
+Report Precision, Recall, Hmean.
+```
+
+Use this exact formula:
+
+[
+P = \frac{TP}{TP+FP}
+]
+
+[
+R = \frac{TP}{TP+FN}
+]
+
+[
+H = \frac{2PR}{P+R}
+]
+
+Report:
+
+```txt
+Detection Precision
+Detection Recall
+Detection Hmean
+```
+
+---
+
+## 5.5 End-to-end evaluation
+
+For every matched GT-pred pair:
+
+```txt
+Correct E2E = IoU > 0.5 AND recognized text is correct
+```
+
+Then compute:
+
+[
+P_{e2e} = \frac{TP_{e2e}}{N_{care_pred}}
+]
+
+[
+R_{e2e} = \frac{TP_{e2e}}{N_{care_gt}}
+]
+
+[
+H_{e2e} = \frac{2P_{e2e}R_{e2e}}{P_{e2e}+R_{e2e}}
+]
+
+Report:
+
+### ICDAR2015
+
+```txt
+E2E Strong
+E2E Weak
+E2E Generic
+```
+
+Optional:
+
+```txt
+Word Spotting Strong
+Word Spotting Weak
+Word Spotting Generic
+```
+
+### Total-Text
+
+```txt
+E2E None
+E2E Full
+```
+
+### CTW1500
+
+```txt
+E2E None
+E2E Full
+```
+
+---
+
+# 6. What your final paper table should look like
+
+## 6.1 Detection table
+
+| Method     | Extra Data           | ICDAR2015 H | Total-Text H | CTW1500 H |
+| ---------- | -------------------- | ----------: | -----------: | --------: |
+| Your model | None                 |             |              |           |
+| Your model | Synthetic            |             |              |           |
+| Your model | Synthetic + external |             |              |           |
+
+For detection, use **Hmean** as the headline, but keep P/R in the detailed table.
+
+---
+
+## 6.2 End-to-end spotting table
+
+| Method     | Extra Data           | ICDAR S | ICDAR W | ICDAR G | Total None | Total Full | CTW None | CTW Full |
+| ---------- | -------------------- | ------: | ------: | ------: | ---------: | ---------: | -------: | -------: |
+| Your model | None                 |         |         |         |            |            |          |          |
+| Your model | Synthetic            |         |         |         |            |            |          |          |
+| Your model | Synthetic + external |         |         |         |            |            |          |          |
+
+This is the cleanest reviewer-friendly format.
+
+---
+
+# 7. Dataset-specific final checklist
+
+## ICDAR2015 checklist
+
+Use:
+
+```txt
+Task: word-level quadrilateral text spotting
+Detection: IoU > 0.5, P/R/H
+E2E: IoU > 0.5 + correct transcription
+Lexicons: Strong / Weak / Generic
+Ignore: ###
+Optional: Word Spotting S/W/G
+```
+
+Report:
+
+```txt
+Det-P, Det-R, Det-H
+E2E-S, E2E-W, E2E-G
+```
+
+---
+
+## Total-Text checklist
+
+Use:
+
+```txt
+Task: word-level arbitrary-shaped text spotting
+Detection: polygon IoU > 0.5, P/R/H
+E2E: polygon IoU > 0.5 + correct transcription
+Lexicons: None / Full
+Ignore: ###
+Optional: official Eval.m P/R/F
+```
+
+Report:
+
+```txt
+Det-P, Det-R, Det-H
+E2E-None, E2E-Full
+```
+
+Also optionally report official Total-Text detection:
+
+```txt
+Official Total-Text Eval.m:
+tr = 0.7
+tp = 0.6
+kt = 2
+fsc_k = 0.8
+P/R/F
+```
+
+---
+
+## CTW1500 checklist
+
+Use:
+
+```txt
+Task: text-line arbitrary-shaped/curved text spotting
+Detection: polygon IoU > 0.5, P/R/H
+E2E: polygon IoU > 0.5 + correct transcription
+Lexicons: None / Full
+Ignore: ###, especially Chinese ignored regions
+Important: long recognition length
+```
+
+Report:
+
+```txt
+Det-P, Det-R, Det-H
+E2E-None, E2E-Full
+```
+
+---
+
+# 8. Mistakes to avoid
+
+1. **Do not evaluate Total-Text or CTW1500 with rectangular boxes.** Use polygon IoU.
+
+2. **Do not mix CTW1500 line-level results with Total-Text word-level assumptions.** CTW1500 has long text-line instances, so max recognition length matters.
+
+3. **Do not forget `###` ignore regions.** This affects both numerator and denominator.
+
+4. **Do not compare lexicon-free results against Full-lexicon results.** Always separate None and Full.
+
+5. **Do not compare your no-external-data model against models trained with TextOCR, MLT, SynthText, Synth150K, or ArT without marking the extra data.** SwinTextSpotter v2 and DeepSolo++ tables include settings with additional external data. ([arXiv][1])
+
+6. **Do not truncate CTW1500 predictions too aggressively.** Long text-line recognition length affects CTW1500 strongly. ([arXiv][6])
+
+7. **Do not use IoU 0.1 unless explicitly reproducing a paper that used it.** Some papers note special cases, but the standard modern protocol is IoU > 0.5.
+
+---
+
+# 9. Final recommendation for your project
+
+For your model, lock this as the official evaluation design:
+
+```txt
+Main protocol:
+- ICDAR2015: IoU>0.5 Detection P/R/H + E2E S/W/G
+- Total-Text: IoU>0.5 Detection P/R/H + E2E None/Full
+- CTW1500: IoU>0.5 Detection P/R/H + E2E None/Full
+
+Supplementary:
+- Total-Text official Eval.m detection P/R/F
+- Optional CTW1500 TIoU diagnostic
+- Optional ICDAR2015 RRC server validation
+```
+
+This gives you one unified evaluator for all three datasets while still respecting the dataset-specific official and paper-standard reporting conventions.
+
+[1]: https://arxiv.org/html/2401.07641v3 "SwinTextSpotter v2: Towards Better Synergy for Scene Text Spotting"
+[2]: https://raw.githubusercontent.com/aim-uofa/AdelaiDet/master/adet/evaluation/text_eval_script.py "raw.githubusercontent.com"
+[3]: https://arxiv.org/abs/1511.09207 "[1511.09207] Incidental Scene Text Understanding: Recent Progresses on ICDAR 2015 Robust Reading Competition Challenge 4"
+[4]: https://raw.githubusercontent.com/aim-uofa/AdelaiDet/master/adet/evaluation/text_eval_script_ic15.py "raw.githubusercontent.com"
+[5]: https://github.com/aim-uofa/AdelaiDet/blob/master/configs/BAText/README.md "AdelaiDet/configs/BAText/README.md at master · aim-uofa/AdelaiDet · GitHub"
+[6]: https://arxiv.org/html/2305.19957v2 "DeepSolo++: Let Transformer Decoder with Explicit Points Solo for Multilingual Text Spotting"
+[7]: https://github.com/cs-chan/Total-Text-Dataset "GitHub - cs-chan/Total-Text-Dataset: Total Text Dataset. It consists of 1555 images with more than 3 different text orientations: Horizontal, Multi-Oriented, and Curved, one of a kind. · GitHub"
+[8]: https://github.com/cs-chan/Total-Text-Dataset/blob/master/Evaluation_Protocol/Eval.m "Total-Text-Dataset/Evaluation_Protocol/Eval.m at master · cs-chan/Total-Text-Dataset · GitHub"
+[9]: https://ojs.aaai.org/index.php/AAAI/article/view/32632/34787 "Arbitrary Reading Order Scene Text Spotter with Local Semantics Guidance"
+[10]: https://raw.githubusercontent.com/yuliang-liu/curve-text-detector/master/README.md "raw.githubusercontent.com"
+[11]: https://raw.githubusercontent.com/yuliang-liu/curve-text-detector/master/OLD_README.md "raw.githubusercontent.com"
+
+"
+
+"The paper is **TiCLS: Tightly Coupled Language Text Spotter**. It evaluates TiCLS as an **end-to-end scene text spotting model**, not just recognition or detection. Its main reported metric is the **standard F1-measure / Hmean** for end-to-end spotting on **ICDAR2015, Total-Text, and CTW1500**. The paper’s Table 1 explicitly says: “End-to-end text spotting results… The standard F1-measure (Hmean) is reported.” ([arXiv][1])
+
+## Protocol used by TiCLS
+
+### 1. Main metric: End-to-end Hmean / F1
+
+TiCLS reports:
+
+[
+Precision = \frac{TP}{TP + FP}
+]
+
+[
+Recall = \frac{TP}{TP + FN}
+]
+
+[
+Hmean = F1 = \frac{2 \cdot Precision \cdot Recall}{Precision + Recall}
+]
+
+A prediction is considered correct only when:
+
+[
+IoU(GT, Prediction) > 0.5
+]
+
+and the predicted transcription matches the ground-truth transcription after the dataset-specific lexicon or no-lexicon rule.
+
+The paper itself does **not re-derive the IoU matching formula**, but it says it follows the **standard evaluation settings** used by previous end-to-end text spotting papers such as TESTR, DeepSolo, ESTextSpotter, and SwinTextSpotter v2. ([arXiv][1])
+
+---
+
+# Dataset-wise protocol used in TiCLS
+
+## 1. ICDAR2015
+
+TiCLS evaluates ICDAR2015 under **four settings**:
+
+| Setting     | Meaning                                                                     |
+| ----------- | --------------------------------------------------------------------------- |
+| **Strong**  | Per-image lexicon. The lexicon contains words annotated in that image.      |
+| **Weak**    | Uses the union of lexicons from all evaluation images.                      |
+| **Generic** | Uses a larger generic lexicon with extra words beyond the ground-truth set. |
+| **None**    | Lexicon-free evaluation. No lexicon correction.                             |
+
+The paper explicitly says ICDAR2015 is evaluated under **Strong, Weak, and Generic** lexicon settings, and it also reports a **lexicon-free None** result. ([arXiv][1])
+
+### TiCLS ICDAR2015 reported scores
+
+| ICDAR2015 Setting |    Hmean |
+| ----------------- | -------: |
+| Strong            | **90.1** |
+| Weak              | **85.4** |
+| Generic           | **81.9** |
+| None              | **79.1** |
+
+The paper also uses an important lexicon post-processing rule:
+
+[
+\hat{y}*{lex} = \arg\min*{w \in L} EditDistance(\hat{y}, w)
+]
+
+But it only accepts the corrected lexicon word if:
+
+[
+EditDistance(\hat{y}, \hat{y}_{lex}) \leq 2
+]
+
+If the closest lexicon word is more than **absolute edit distance 2** away, the detection is discarded. The paper says this follows TESTR and other DETR-based descendants. ([arXiv][1])
+
+So for ICDAR2015, TiCLS uses:
+
+```text
+End-to-end spotting Hmean
+IoU-based localization match
+Recognition exact match after lexicon correction
+Lexicon settings: Strong / Weak / Generic / None
+Lexicon correction threshold: absolute edit distance ≤ 2
+```
+
+---
+
+## 2. Total-Text
+
+TiCLS evaluates Total-Text under **two settings**:
+
+| Setting  | Meaning                                               |
+| -------- | ----------------------------------------------------- |
+| **None** | Lexicon-free evaluation                               |
+| **Full** | Full lexicon built from all evaluation text instances |
+
+The paper says Total-Text is evaluated “without a lexicon (None)” and “with a lexicon constructed from all evaluation text instances (Full).” It also applies the same edit-distance-based filtering and correction used for ICDAR2015. ([arXiv][1])
+
+### TiCLS Total-Text reported scores
+
+| Total-Text Setting |    Hmean |
+| ------------------ | -------: |
+| None               | **84.6** |
+| Full               | **90.4** |
+
+So for Total-Text, TiCLS uses:
+
+```text
+End-to-end spotting Hmean
+Polygon/curved-text matching under standard text spotting evaluation
+Settings: None / Full
+Full lexicon: all evaluation text instances
+Lexicon correction: closest lexicon entry with edit-distance filtering
+```
+
+This is the exact same reporting style used by DeepSolo, SwinTextSpotter v2, LMTextSpotter, and other recent text-spotting papers.
+
+---
+
+## 3. CTW1500 / SCUT-CTW1500
+
+TiCLS evaluates CTW1500 under **two settings**:
+
+| Setting  | Meaning                                                                      |
+| -------- | ---------------------------------------------------------------------------- |
+| **None** | Lexicon-free evaluation                                                      |
+| **Full** | Full lexicon containing the complete text phrase instances from the test set |
+
+The paper specifically notes that CTW1500 is different from ICDAR2015 and Total-Text because it contains **curved phrases**, and each annotated unit may contain **multiple words**. ([arXiv][1])
+
+### TiCLS CTW1500 reported scores
+
+| CTW1500 Setting |    Hmean |
+| --------------- | -------: |
+| None            | **66.2** |
+| Full            | **88.1** |
+
+For CTW1500, TiCLS changes the lexicon post-processing threshold because CTW1500 has much longer text sequences.
+
+Instead of absolute edit distance ≤ 2, it uses:
+
+[
+NormalizedEditDistance(\hat{y}, \hat{y}_{lex}) \leq 0.3
+]
+
+The paper explicitly says that because CTW1500 has longer text sequences, they adopt a **normalized edit-distance threshold of 0.3** for post-processing. ([arXiv][1])
+
+So for CTW1500, TiCLS uses:
+
+```text
+End-to-end spotting Hmean
+Curved text-line / phrase-level evaluation
+Settings: None / Full
+Full lexicon: full text phrase instances from test set
+Lexicon correction threshold: normalized edit distance ≤ 0.3
+```
+
+---
+
+# Final summary: exact TiCLS evaluation protocol
+
+| Dataset        | Evaluation type  | Reported settings              | Lexicon post-processing                 | Reported TiCLS scores     |
+| -------------- | ---------------- | ------------------------------ | --------------------------------------- | ------------------------- |
+| **ICDAR2015**  | End-to-end Hmean | Strong / Weak / Generic / None | Absolute edit distance ≤ 2              | 90.1 / 85.4 / 81.9 / 79.1 |
+| **Total-Text** | End-to-end Hmean | None / Full                    | Same edit-distance correction/filtering | 84.6 / 90.4               |
+| **CTW1500**    | End-to-end Hmean | None / Full                    | Normalized edit distance ≤ 0.3          | 66.2 / 88.1               |
+
+## What this means for your model
+
+To compare directly against TiCLS, you should report:
+
+```text
+ICDAR2015:
+- E2E Strong
+- E2E Weak
+- E2E Generic
+- E2E None
+
+Total-Text:
+- E2E None
+- E2E Full
+
+CTW1500:
+- E2E None
+- E2E Full
+```
+
+And use:
+
+```text
+Metric: standard end-to-end Hmean / F1
+Localization: standard text spotting IoU matching
+Recognition: exact text match after dataset-specific lexicon correction
+ICDAR/Total-Text lexicon filter: absolute edit distance ≤ 2
+CTW1500 lexicon filter: normalized edit distance ≤ 0.3
+```
+
+The most important detail: **TiCLS is not reporting only detection Hmean. Its main leaderboard claim is end-to-end text spotting Hmean**, where detection and recognition must both be correct.
+
+[1]: https://arxiv.org/html/2602.04030v1 "TiCLS: Tightly Coupled Language Text Spotter"
+"

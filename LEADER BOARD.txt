@@ -1,0 +1,1097 @@
+LEADER BOARD
+
+
+""
+Yes, **for end-to-end text spotting, my previous answer was wrong/incomplete**.
+
+I incorrectly built the ranking mainly around **text detection / localization H-mean**, where models like DAT, MixNet, SRFormer, DPText-DETR, etc. are relevant. But your project context is **scene text spotting**, and for that setting the current top paper across **ICDAR2015, Total-Text, and CTW1500** is indeed:
+
+**TiCLS: Tightly Coupled Language Text Spotter**
+WACV 2026, Leeje Jang, Yijun Lin, Yao-Yi Chiang, Jerod Weinman. The paper explicitly evaluates on **ICDAR2015, Total-Text, and CTW1500** and says TiCLS achieves state-of-the-art performance across the standard end-to-end text spotting settings. ([arXiv][1])
+
+## Corrected SOTA numbers from TiCLS
+
+| Dataset        |  Evaluation setting |   TiCLS result |
+| -------------- | ------------------: | -------------: |
+| **ICDAR2015**  |      Strong lexicon | **90.1 Hmean** |
+| **ICDAR2015**  |        Weak lexicon | **85.4 Hmean** |
+| **ICDAR2015**  |     Generic lexicon | **81.9 Hmean** |
+| **ICDAR2015**  | None / lexicon-free | **79.1 Hmean** |
+| **Total-Text** | None / lexicon-free | **84.6 Hmean** |
+| **Total-Text** |        Full lexicon | **90.4 Hmean** |
+| **CTW1500**    | None / lexicon-free | **66.2 Hmean** |
+| **CTW1500**    |        Full lexicon | **88.1 Hmean** |
+
+These are **end-to-end text spotting results**, meaning the model must both **detect the text region and recognize the text correctly**. TiCLS reports these in Table 1 and states that the standard F1/Hmean is used. ([arXiv][1])
+
+## Why the previous answer became misleading
+
+There are two different leaderboards people mix up:
+
+| Task                         | What is evaluated                                            | Relevant SOTA examples                                                |
+| ---------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------- |
+| **Text detection**           | Did the model localize the text region correctly?            | DAT, SRFormer, MixNet, DPText-DETR, TextFuseNet                       |
+| **End-to-end text spotting** | Did the model localize **and recognize** the text correctly? | **TiCLS**, SwinTextSpotter v2, DeepSolo, ESTextSpotter, LMTextSpotter |
+
+So the previous answer was not fully useless for **detector-only comparisons**, but it was wrong for the **main SOTA text spotting leaderboard** you are targeting.
+
+## Correct TiCLS architecture summary
+
+TiCLS is built on a **DETR-style visual encoder-decoder** and adds a **pretrained linguistic decoder**. The core idea is to tightly couple visual text features with a character-level pretrained language model designed specifically for scene text, instead of using a generic sentence-level PLM like BART. ([arXiv][1])
+
+Its architecture has three main parts:
+
+1. **Visual feature extractor + visual decoder**
+   Based on prior DETR-style text spotters such as DeepSolo.
+
+2. **Visual-to-language projection head**
+   Maps visual decoder embeddings into the linguistic decoder space.
+
+3. **Linguistic decoder initialized from a scene-text PLM**
+   This decoder performs autoregressive text recognition using visual-linguistic fused features. ([arXiv][1])
+
+## Correct implementation details
+
+TiCLS uses:
+
+* **DeepSolo pretrained weights** for the backbone, visual encoder, and visual decoder.
+* **6-layer visual encoder and 6-layer visual decoder**.
+* A **6-layer PLM encoder and 6-layer PLM decoder**.
+* A **194-token character-level vocabulary**, including punctuation, symbols, case-sensitive characters, and word-initial token variants.
+* **AdamW** optimizer.
+* TiCLS pretraining on **4 NVIDIA A100-SXM4-40GB GPUs**, batch size 4.
+* Fine-tuning on each target benchmark with batch size 2 on 2 GPUs. ([arXiv][1])
+
+## Training data used by TiCLS
+
+For TiCLS training, the paper uses:
+
+* **SynthText 150K**
+* **ICDAR2013**
+* **TextOCR**
+* **ICDAR2017-MLT**, Latin annotations only
+
+For PLM pretraining, it uses text from:
+
+* SynthText 150K
+* Total-Text
+* ICDAR2013
+* ICDAR2015
+* TextOCR
+* LSVT
+* ArT
+* SVT
+* IIIT5K
+* AG News
+* WikiText
+* OpenStreetMap POI names from Paris, Barcelona, and Beijing
+
+The final PLM text corpus contains **932,905 unique text sequences**. ([arXiv][1])
+
+## Parameter count and code
+
+TiCLS reports **98.5M parameters**, compared with **36.0M for DeepSolo**. It is more accurate but slower: **1.35s forward pass** versus **0.87s for DeepSolo** in their reported limitation discussion. ([arXiv][1])
+
+The official GitHub repo is public under **knowledge-computing/TiCLS**. It includes installation instructions, training/evaluation commands, PLM training scripts, and links for TiCLS weights, PLM weights, tokenizer, and annotations. ([GitHub][2])
+
+## Correct position for your paper
+
+For your work on **ICDAR2015 + CTW1500 + Total-Text**, the main SOTA target should be:
+
+**Primary SOTA baseline:** TiCLS
+**Secondary high-value spotting baselines:** SwinTextSpotter v2, TextBlockV2, LMTextSpotter, ESTextSpotter, DeepSolo, TESTR
+**Detection-only baselines:** DAT, SRFormer, DPText-DETR, MixNet, TextFuseNet
+
+So yes, the corrected statement is:
+
+**TiCLS is the current strongest SOTA reference for end-to-end text spotting on these three datasets.**
+The previous leaderboard should have been split into **detection-only** and **end-to-end text spotting**, and for your target, TiCLS should have been placed at the top.
+
+[1]: https://arxiv.org/html/2602.04030v1 "TiCLS: Tightly Coupled Language Text Spotter"
+[2]: https://github.com/knowledge-computing/TiCLS "GitHub - knowledge-computing/TiCLS: Code for WACV2026 paper “TiCLS: Tightly Coupled Language Text Spotter” · GitHub"
+
+""
+""
+Below is the **scene text detection leaderboard-style review** for **ICDAR2015, CTW1500, and Total-Text**, ranked mainly by **Detection F-measure / H-mean / F1**, not recognition-only accuracy. I’m de-duplicating by **paper/model family**, so the same paper does not fill multiple ranks with variants. Where a paper reports multiple variants, I list the best relevant variant.
+
+Important: some papers are **pure text detection**, while others are **end-to-end text spotting models** that also report detection results. I include both when their detection scores are leaderboard-level.
+
+---
+
+# 1. ICDAR2015 leaderboard, top 5 unique papers
+
+ICDAR2015 is a **multi-oriented incidental scene text** benchmark with **1,000 training** and **500 test images**, usually evaluated using **precision, recall, and F-measure/H-mean** on quadrilateral text localization. UNITS also describes ICDAR2015 as quadrilateral-annotated, with 1,000 train and 500 test images. ([CVF Open Access][1])
+
+| Rank | Paper / model                      | Best reported detection score | Model type                                                           | Backbone                         |                                    Params | Code                                              |
+| ---: | ---------------------------------- | ----------------------------: | -------------------------------------------------------------------- | -------------------------------- | ----------------------------------------: | ------------------------------------------------- |
+|    1 | **DAT-DET, Detect Any Text / DAT** | **P 90.87, R 94.51, F 92.66** | Transformer multi-granularity detector                               | Swin-L, ImageNet-22K init        | **228.29M** DAT-DET, **284.65M** full DAT | Public code not clearly available from paper page |
+|    2 | **UNITS**                          |    **P 94.0, R 91.0, F 92.5** | Autoregressive text spotting / sequence generation                   | Swin-B                           |                              Not reported | Yes, official GitHub                              |
+|    3 | **TextFuseNet**                    |          **≈F 92.1 to 92.23** | Mask R-CNN-style instance segmentation detector                      | ResNet-101 / ResNeXt-101 variant |                              Not reported | Yes, official GitHub                              |
+|    4 | **CharNet H-88 multi-scale**       | **P 92.65, R 90.47, F 91.55** | One-stage character-aware detector/spotter                           | Hourglass-88                     |                                **89.21M** | Yes, testing code                                 |
+|    5 | **ESTextSpotter**                  |    **P 92.5, R 89.6, H 91.0** | Transformer text spotter with explicit detection-recognition synergy | ResNet-50                        |                              Not reported | Yes, official GitHub                              |
+
+Sources for the ICDAR ranking: DAT reports 92.66 F-score and compares against UNITS and ESTextSpotter; UNITS reports 92.5 detection F-measure; TextFuseNet reports 92.1 in paper and 92.2 in its implementation; CharNet reports the H-88 multi-scale 91.55 result; ESTextSpotter reports 91.0 H-mean. ([arXiv][2])
+
+---
+
+# 2. Total-Text leaderboard, top 5 unique papers
+
+Total-Text is an **arbitrary-shaped / curved scene text** benchmark with **1,255 training** and **300 testing images**, annotated at **word level** with polygons. ([ar5iv][3])
+
+| Rank | Paper / model                         | Best reported detection score | Model type                                          | Backbone            |                                         Params | Code                                              |
+| ---: | ------------------------------------- | ----------------------------: | --------------------------------------------------- | ------------------- | ---------------------------------------------: | ------------------------------------------------- |
+|    1 | **DAT-SEG**                           | **P 95.04, R 89.16, F 92.01** | Transformer detector + prompt-based segmentation    | Swin-L              |                           **284.65M** full DAT | Public code not clearly available from paper page |
+|    2 | **MixNet FSNet-M**                    |    **P 93.0, R 88.1, F 90.5** | Hybrid CNN + Transformer contour detector           | FSNet-M             |                             **29.3M backbone** | Yes, official GitHub found                        |
+|    3 | **SRFormer #2Seg**                    |    **P 92.2, R 87.9, F 90.0** | DETR-style segmentation + regression transformer    | ResNet-50           | Full not reported, MQE+AnchorReg add **3.34M** | Yes, official GitHub                              |
+|    4 | **ESTextSpotter**                     |    **P 92.0, R 88.1, H 90.0** | Transformer text spotter                            | ResNet-50           |                                   Not reported | Yes                                               |
+|    5 | **ERRNet, with external pretraining** |    **P 92.6, R 87.3, F 89.9** | Connected-component / relational reasoning detector | ResNet-50-DCN + FPN |                                   Not reported | No official code found clearly                    |
+
+DAT-SEG is currently the strongest reported result among these sources on Total-Text. MixNet is a strong and much lighter detector. SRFormer and ESTextSpotter both report 90.0, but SRFormer is detection-only while ESTextSpotter is an end-to-end spotting model. ERRNet reaches 89.9 with external pretraining. ([arXiv][2])
+
+---
+
+# 3. CTW1500 leaderboard, top 5 unique papers
+
+CTW1500 is a **long curved text-line detection** dataset, commonly evaluated at **line level**. Several papers describe it as **1,000 train / 500 test** with polygon annotations for curved text. ([arXiv][4])
+
+| Rank | Paper / model                         | Best reported detection score | Model type                                                   | Backbone            |                                         Params | Code                                              |
+| ---: | ------------------------------------- | ----------------------------: | ------------------------------------------------------------ | ------------------- | ---------------------------------------------: | ------------------------------------------------- |
+|    1 | **DAT-SEG**                           | **P 92.51, R 90.94, F 91.72** | Transformer detector + prompt-based segmentation             | Swin-L              |                           **284.65M** full DAT | Public code not clearly available from paper page |
+|    2 | **ESTextSpotter**                     |    **P 91.5, R 88.6, H 90.0** | Transformer text spotter                                     | ResNet-50           |                                   Not reported | Yes                                               |
+|    3 | **SRFormer #1/#3Seg**                 |                    **F 89.6** | DETR-style segmentation + regression transformer             | ResNet-50           | Full not reported, MQE+AnchorReg add **3.34M** | Yes                                               |
+|    4 | **ERRNet, with external pretraining** |    **P 91.0, R 87.9, F 89.4** | Connected-component / explicit relational reasoning detector | ResNet-50-DCN + FPN |                                   Not reported | No official code found clearly                    |
+|    5 | **DPText-DETR**                       |    **P 91.7, R 86.2, F 88.8** | Dynamic-point DETR-style regression detector                 | ResNet-50           |                                   Not reported | Yes, official GitHub                              |
+
+DAT-SEG is the clear top score in the sources checked. ESTextSpotter is especially strong despite being a text spotter, not only a detector. SRFormer and DPText-DETR are good reproducible research baselines because they are transformer-based detection models with cleaner detector-only objectives. ([arXiv][2])
+
+---
+
+# 4. Model-by-model implementation and methodology details
+
+## 4.1 DAT: Detect Any Text / Towards Unified Multi-granularity Text Detection
+
+**Best use case:** maximum leaderboard performance across ICDAR2015, Total-Text, and CTW1500.
+
+DAT is a **multi-granularity text detection transformer** designed to detect **word, line, paragraph, and page** levels inside one model. It uses **interactive attention across granularities**, so word-level, line-level, paragraph-level, and page-level queries can exchange structural information. The full DAT model also adds a **prompt-based segmentation module** to refine arbitrary-shaped text contours, which is why **DAT-SEG** dominates Total-Text and CTW1500. ([arXiv][2])
+
+**Architecture:**
+
+* Backbone: **Swin Transformer Large**, initialized from ImageNet-22K.
+* Detection branch: DAT-DET, transformer decoder with multi-granularity query groups.
+* Segmentation branch: DAT-SEG, prompt-based segmentation module with FPN, prompt encoder, and mask decoder.
+* Objective: detection losses with polygon regression, GIoU, and focal-style classification, plus segmentation mask losses.
+* Parameter count: **228.29M** for DAT-DET, **284.65M** for full DAT DET+SEG.
+* Compute: **394 GFLOPs** for DAT-DET, **474 GFLOPs** full DAT.
+
+**Training data:**
+DAT uses a large mixed public dataset setup: ICDAR2015, Total-Text, Curved SynthText, ICDAR-MLT, ArT, CTW1500, MSRA-TD500, M6Doc, DIW, and Doc3D. This means its leaderboard results are **not target-only training**. ([arXiv][2])
+
+**Training setup:**
+
+* 8 NVIDIA A100 GPUs.
+* Batch size 8.
+* Query number per group: 900.
+* 120 epochs.
+* AdamW.
+* Augmentations: random flip, rotation from -45° to 45°, color distortion, random crop, resize shorter side 480 to 800, max longer side 1333. ([arXiv][2])
+
+**Key lesson for your project:** DAT is the best reference if you want SOTA numbers, but it is heavy. If you only target Total-Text/CTW/ICDAR, copying the full multi-granularity design may be overkill unless your novelty depends on unified multi-level detection.
+
+---
+
+## 4.2 UNITS: Towards Unified Scene Text Spotting based on Sequence Generation
+
+**Best use case:** unified text spotting with flexible output formats.
+
+UNITS frames scene text spotting as **autoregressive sequence generation**. Instead of using separate heads for boxes, quadrilaterals, polygons, and recognition, it converts locations and text into tokens and predicts the output sequence with a transformer decoder. It supports **central point, bounding box, quadrilateral, and polygon** output formats. ([CVF Open Access][1])
+
+**Architecture:**
+
+* Visual encoder: **Swin-B**.
+* Decoder: 8-layer transformer decoder.
+* Uses **multi-way transformer decoder** with detection and recognition experts.
+* Uses **starting-point prompting**, allowing the model to extract more text instances than a fixed decoder length would normally allow.
+* Max decoder length: 1024.
+* Loss: standard token-level cross-entropy.
+
+**Training data:**
+UNITS uses Curved SynthText, ICDAR2013, ICDAR2015, MLT2019, Total-Text, TextOCR, and HierText. The official repo also expects TotalText, CTW1500, ICDAR2013, ICDAR2015, CurvedSynText150k, MLT2019, TextOCR, and HierText. ([CVF Open Access][1])
+
+**Training setup:**
+
+* Pretraining: 300k steps, batch size 128.
+* Fine-tuning: 120k steps, batch size 16, input resolution 1920×1920.
+* Optimizer: AdamW with cosine LR.
+* Augmentations: random rotation, random resize 30% to 200%, random crop, color jitter, padded resize to 768×768 during pretraining. ([CVF Open Access][1])
+
+**Code:** official code, data annotations, and model weights were released in the UNITS GitHub repo. ([GitHub][5])
+
+**Key lesson for your project:** UNITS is powerful but closer to a **text spotting / OCR sequence model** than a pure detector. For your detector-focused work, it is useful as a conceptual reference, not necessarily the cleanest baseline.
+
+---
+
+## 4.3 TextFuseNet
+
+**Best use case:** strong classical instance-segmentation baseline for arbitrary-shaped text.
+
+TextFuseNet is a **Mask R-CNN-style instance segmentation detector** that fuses **character-level, word-level, and global-level features**. The key idea is that word-only instance segmentation misses character structure and global text semantics, so TextFuseNet adds richer feature supervision and a multi-path fusion architecture. ([IJCAI][6])
+
+**Architecture:**
+
+* Base: Mask R-CNN / Mask TextSpotter-style pipeline.
+* Adds semantic segmentation branch for global text features.
+* Adds character-level and word-level branches.
+* Uses **multi-path feature fusion** to merge character, word, and global features.
+* Backbone: paper reports ResNet-50 and ResNet-101; implementation also reports ResNeXt-101.
+
+**Training data and method:**
+
+* Pretrain on **SynthText**, which has word and character annotations.
+* Use weak supervision to generate pseudo character-level samples on real datasets.
+* Fine-tune on ICDAR2015, Total-Text, CTW1500.
+* Training: 4 GPUs, SGD, weight decay 0.0001, momentum 0.9, batch size 8.
+* Pretraining: 20 epochs on SynthText.
+* Fine-tuning: 20k iterations per dataset.
+* Augmentations: multi-scale training, random rotation, random color adjustment. ([IJCAI][6])
+
+**Scores:**
+
+* Paper: ICDAR2015 F 92.1, Total-Text F 87.1, CTW1500 F 86.6.
+* GitHub implementation: ICDAR2015 F 92.2 with ResNeXt-101, Total-Text F 87.5, CTW1500 F 87.4. ([IJCAI][6])
+
+**Code:** official PyTorch/Detectron2 implementation is available. ([GitHub][7])
+
+**Key lesson for your project:** TextFuseNet is not current SOTA anymore, but its **feature fusion design** is still useful if you want a strong explanation for why character/word/global cues improve curved text localization.
+
+---
+
+## 4.4 CharNet
+
+**Best use case:** character-aware one-stage detection and recognition.
+
+CharNet is a **one-stage fully convolutional model** for joint text detection and recognition. Its important contribution is a **direct character branch**, which allows character-level detection and recognition without RoI pooling or RNN-based recognition. ([CVF Open Access][8])
+
+**Architecture:**
+
+* One-stage convolutional model.
+* Two parallel branches:
+
+  1. Character detection and recognition branch.
+  2. Text instance detection branch.
+* Multi-oriented text branch modifies EAST-style detection.
+* Curved text version uses a TextField-like direction field.
+* Final text instances are formed by grouping detected characters into text instances.
+
+**Backbones and parameters:**
+
+* CharNet R-50: **26.48M**.
+* CharNet H-57: **34.96M**.
+* CharNet H-88: **89.21M**.
+* Best ICDAR2015 variant: **H-88 multi-scale**, F 91.55. ([CVF Open Access][8])
+
+**Training data and method:**
+
+* Synthetic pretraining on **Synth800k** for 5 epochs.
+* Then iterative character detection on real-world data.
+* Uses automatically mined character boxes from word-level annotations.
+* Real training proceeds through iterative stages of 100, 400, and 800 epochs.
+* Mini-batch: 32 images, 4 images per GPU.
+* Uses data augmentation and OHEM. ([CVF Open Access][8])
+
+**Code:** testing code and weights are available in the official GitHub repo. ([GitHub][9])
+
+**Key lesson for your project:** CharNet proves that **recognition supervision can improve detection**. If your model is detection-only, you can still borrow this idea by adding auxiliary character/centerline/reading-order supervision.
+
+---
+
+## 4.5 ESTextSpotter
+
+**Best use case:** strong transformer text spotting with detection-recognition synergy.
+
+ESTextSpotter is an **end-to-end text spotting transformer**. Its main idea is that detection and recognition should not only share features implicitly. Instead, it explicitly separates **detection queries** and **recognition queries**, then lets them interact through a **vision-language communication module** inside a single task-aware decoder. ([CVF Open Access][10])
+
+**Architecture:**
+
+* Backbone: **ResNet-50**.
+* Feature extraction: ResNet-50 + Receptive Enhancement Module + Transformer encoder.
+* Query initialization: **Task-aware Query Initialization**.
+* Decoder: task-aware decoder with detection and recognition queries.
+* Interaction: **Vision-Language Communication** module.
+* Training acceleration: **Task-aware DeNoising**.
+* Losses: Hungarian matching, focal classification loss, L1 + GIoU box loss, polygon L1 loss, recognition cross-entropy. ([CVF Open Access][10])
+
+**Training data and method:**
+
+* Pretrain on Curved SynthText, ICDAR-MLT, and corresponding datasets for 240k iterations.
+* Then pretrain/fine-tune on Total-Text, ICDAR2013, ICDAR-MLT, and real target datasets.
+* N = 100 predictions, recognition length T = 25.
+* Encoder and decoder layers: 6 each.
+* Augmentations: random resize, random crop, random rotation [-45°, 45°].
+* Test resize: shorter side 1000, longer side capped at 1824.
+* Inference speed tested on RTX 3090. ([CVF Open Access][10])
+
+**Scores:**
+
+* ICDAR2015: H 91.0.
+* Total-Text: H 90.0.
+* CTW1500: H 90.0. ([CVF Open Access][10])
+
+**Code:** official PyTorch implementation is available. ([GitHub][11])
+
+**Key lesson for your project:** ESTextSpotter is a strong argument that **detection and recognition interaction improves localization**, especially for ambiguous or curved text. If your work is detector-only, you can adapt this as an auxiliary semantic branch rather than full recognition.
+
+---
+
+## 4.6 MixNet
+
+**Best use case:** strong Total-Text detector with much lower parameter count than DAT.
+
+MixNet is a **hybrid CNN + Transformer** detector designed for challenging scene text, especially small/noisy/arbitrary-shaped text. It introduces **FSNet** as the backbone and uses transformer blocks to refine text contours through contour and centerline features. ([ar5iv][3])
+
+**Architecture:**
+
+* Backbone: **FSNet**.
+* Uses high-resolution and low-resolution feature exchange for robustness.
+* Predicts rough contours.
+* Samples contour and centerline features.
+* Uses transformer modules to refine centerlines and text contours.
+* Centerline points are supervised from upper and lower text contours.
+
+**Parameter count:**
+
+* FSNet variants: 15.1M to 29.3M.
+* Best reported Total-Text variant uses **FSNet-M**, around **29.3M backbone parameters**. ([ar5iv][3])
+
+**Training data and method:**
+
+* Pretrain FSNet on **SynthText 800K** for 5 epochs.
+* Fine-tune for 600 epochs on Total-Text, ArT, and other datasets.
+* Optimizer: Adam, LR 0.001.
+* LR decays by 0.9 every 50 epochs.
+* Augmentations: random rotation, crop, flip, color jitter.
+* Framework: Python 3, PyTorch 1.10.2.
+* Hardware: RTX 3090 24 GB. ([ar5iv][3])
+
+**Score:**
+
+* Total-Text: **P 93.0, R 88.1, F 90.5**. ([ar5iv][3])
+
+**Key lesson for your project:** MixNet is probably one of the most practical baselines if you want **high Total-Text performance without DAT-level compute**. Its FSNet + centerline refinement idea is directly relevant to your Total-Text pipeline.
+
+---
+
+## 4.7 SRFormer
+
+**Best use case:** strong, clean detector-only transformer baseline for Total-Text and CTW1500.
+
+SRFormer combines **segmentation and regression** inside a DETR-style text detection transformer. The idea is that segmentation is good for coarse arbitrary-shaped regions, while regression is good for precise polygon refinement. ([arXiv][4])
+
+**Architecture:**
+
+* Backbone: **ResNet-50**.
+* Deformable transformer encoder.
+* 100 proposals.
+* 16 polygon control-point embeddings.
+* Decoder split into:
+
+  1. Segmentation & regression chunk.
+  2. Regression-only refinement chunk.
+* Adds **Mask-informed Query Enhancement**, which uses predicted masks as soft RoI guides to enhance query features.
+
+**Parameter count:**
+
+* Full parameter count not clearly reported.
+* Added modules: AnchorReg adds **0.39M**, MQE adds **2.95M**, combined adds **3.34M**. ([arXiv][4])
+
+**Training data and method:**
+
+* Pretraining on SynthText150K, MLT17, and TotalText for 300k iterations.
+* Fine-tuning on TotalText and CTW1500 for 30k iterations.
+* Optimizer: AdamW.
+* Augmentations: random crop, random blur, brightness adjustment, color alteration.
+* Multi-scale training: shortest edge 480 to 896, longest edge ≤1600.
+* Evaluation: shorter side 1000, longer side ≤1800.
+* Hardware: 8 NVIDIA 3090 GPUs. ([arXiv][4])
+
+**Scores:**
+
+* Total-Text: best variant F 90.0.
+* CTW1500: best variant F 89.6.
+* DPText baseline in the same comparison: Total-Text F 88.7, CTW1500 F 88.8. ([arXiv][4])
+
+**Code:** official GitHub exists. ([GitHub][12])
+
+**Key lesson for your project:** SRFormer is one of the best models to study if you want a **paper-friendly detector**: segmentation gives recall and shape coverage, regression gives clean contours.
+
+---
+
+## 4.8 ERRNet
+
+**Best use case:** fast connected-component style detector for long curved text.
+
+ERRNet revives connected-component style text detection but removes the old heavy post-processing by treating text components as a **tracking-like sequence problem**. It represents each text boundary as ordered quadrilateral components, then uses explicit relational reasoning to group and order them. ([arXiv][13])
+
+**Architecture:**
+
+* Backbone: **ResNet-50 with DCN**.
+* FPN for multi-scale features.
+* Text Component Initialization module creates coarse text components.
+* Transformer decoder refines components and learns associative/sequential relations.
+* Uses B-spline interpolation to sample ordered components.
+* Uses component sequence matching and polygon IoU-style supervision.
+* Post-processing-free compared with traditional CC methods.
+
+**Training data and method:**
+
+* Scratch training with AdamW.
+* External-pretrained setting uses SynthText-150K, MLT, and Total-Text.
+* Augmentations: RandomCrop, RandomRotate, ColorJitter.
+* Evaluation: F-measure at IoU@0.5.
+* Hardware: RTX 3090. ([arXiv][13])
+
+**Scores with external pretraining:**
+
+* Total-Text: **P 92.6, R 87.3, F 89.9**.
+* CTW1500: **P 91.0, R 87.9, F 89.4**.
+* FPS: 31.5 on RTX 3090. ([arXiv][13])
+
+**Code:** I did not find a clearly official public repo in the checked sources.
+
+**Key lesson for your project:** ERRNet is useful if your target is **long curved text** and you want speed. Its component-sequence view is also a good source of novelty if you want to model text as ordered geometry instead of only masks/polygons.
+
+---
+
+## 4.9 DPText-DETR
+
+**Best use case:** strong transformer regression baseline for arbitrary-shaped text.
+
+DPText-DETR is a **dynamic-point text detection transformer**. It directly uses explicit point coordinates to generate positional queries and updates them progressively. It also introduces **Enhanced Factorized Self-Attention** to add spatial inductive bias for point queries. ([arXiv][14])
+
+**Architecture:**
+
+* DETR-style detector.
+* Backbone usually reported as **ResNet-50** in comparison tables.
+* Explicit Point Query Modeling.
+* Dynamic point update layer by layer.
+* Enhanced Factorized Self-Attention for shape-aware point query interaction.
+* Robust positional label form to avoid reading-order bias.
+* Introduces an **Inverse-Text** test set for robustness analysis.
+
+**Training data:**
+
+* In SRFormer’s comparison, DPText-DETR uses **SynthText150K + MLT17**, and sometimes LSVT depending on benchmark. ([arXiv][4])
+
+**Scores used here:**
+
+* Total-Text: around **F 88.7 to 89.0** depending source table.
+* CTW1500: **P 91.7, R 86.2, F 88.8**. ([arXiv][2])
+
+**Code:** official GitHub is available. ([GitHub][15])
+
+**Key lesson for your project:** DPText-DETR is a strong baseline if your model is also polygon/control-point based. It is less heavy than DAT and easier to position as a fair detector baseline.
+
+---
+
+# 5. Practical takeaways for your research direction
+
+For your three-dataset setup, the strongest comparison table should include:
+
+| Purpose                                             | Best references           |
+| --------------------------------------------------- | ------------------------- |
+| Absolute SOTA target                                | **DAT-SEG / DAT-DET**     |
+| Strong detector-only transformer baselines          | **SRFormer, DPText-DETR** |
+| Strong Total-Text practical baseline                | **MixNet**                |
+| Strong text spotting baselines                      | **ESTextSpotter, UNITS**  |
+| Character-aware / auxiliary recognition inspiration | **CharNet**               |
+| Classic segmentation-fusion inspiration             | **TextFuseNet**           |
+| Fast long-curved text geometry inspiration          | **ERRNet**                |
+
+For your own paper, I would compare against **DAT, MixNet, SRFormer, ERRNet, DPText-DETR, ESTextSpotter**, and optionally **TextFuseNet/CharNet** as older but influential baselines.
+
+The main thing to be careful about: many top numbers use **external or synthetic data**. If your claim is “real-data only,” compare only against real-data-only rows. If your final claim uses synthetic pretraining, make the comparison table explicitly label: **Target-only**, **SynthText/Synth150K**, **MLT/ArT/LSVT external**, and **mixed multi-dataset training**.
+
+[1]: https://openaccess.thecvf.com/content/CVPR2023/papers/Kil_Towards_Unified_Scene_Text_Spotting_Based_on_Sequence_Generation_CVPR_2023_paper.pdf "Towards Unified Scene Text Spotting Based on Sequence Generation"
+[2]: https://arxiv.org/html/2405.19765v1 "Towards Unified Multi-granularity Text Detection with Interactive Attention"
+[3]: https://ar5iv.org/pdf/2308.12817 "[2308.12817] MixNet: Toward Accurate Detection of Challenging Scene Text in the Wild"
+[4]: https://arxiv.org/html/2308.10531v2 "SRFormer: Text Detection Transformer with Incorporated Segmentation and Regression"
+[5]: https://github.com/clovaai/units "GitHub - clovaai/units · GitHub"
+[6]: https://www.ijcai.org/proceedings/2020/0072.pdf "TextFuseNet: Scene Text Detection with Richer Fused Features"
+[7]: https://github.com/ying09/TextFuseNet "GitHub - ying09/TextFuseNet: A PyTorch implementation of \"TextFuseNet: Scene Text Detection with Richer Fused Features\". · GitHub"
+[8]: https://openaccess.thecvf.com/content_ICCV_2019/papers/Xing_Convolutional_Character_Networks_ICCV_2019_paper.pdf "Convolutional Character Networks"
+[9]: https://github.com/msight-tech/research-charnet "GitHub - msight-tech/research-charnet: CharNet: Convolutional Character Networks · GitHub"
+[10]: https://openaccess.thecvf.com/content/ICCV2023/papers/Huang_ESTextSpotter_Towards_Better_Scene_Text_Spotting_with_Explicit_Synergy_in_ICCV_2023_paper.pdf "ESTextSpotter: Towards Better Scene Text Spotting with Explicit Synergy in Transformer"
+[11]: https://github.com/mxin262/ESTextSpotter "GitHub - mxin262/ESTextSpotter: (ICCV 2023) ESTextSpotter: Towards Better Scene Text Spotting with Explicit Synergy in  Transformer · GitHub"
+[12]: https://github.com/retsuh-bqw/SRFormer-Text-Det?utm_source=chatgpt.com "SRFormer: Text Detection Transformer with Incorporated ..."
+[13]: https://arxiv.org/html/2412.14692v3 "Explicit Relational Reasoning Network for Scene Text Detection"
+[14]: https://arxiv.org/abs/2207.04491?utm_source=chatgpt.com "DPText-DETR: Towards Better Scene Text Detection with Dynamic Points in Transformer"
+[15]: https://github.com/ymy-k/DPText-DETR?utm_source=chatgpt.com "DPText-DETR: Towards Better Scene Text Detection with ..."
+
+"""
+
+"""
+Here is the corrected **end-to-end scene text spotting leaderboard**, not detection-only.
+I’m ranking by the hardest commonly reported setting for each dataset:
+
+* **ICDAR2015:** ranked by **Generic lexicon Hmean**, while also showing Strong, Weak, and None.
+* **Total-Text:** ranked by **None / lexicon-free Hmean**.
+* **CTW1500:** ranked by **None / lexicon-free Hmean**.
+
+These are **spotting scores**, meaning a prediction must localize the text and recognize the transcript correctly. TiCLS Table 1 is the cleanest current cross-dataset comparison because it reports ICDAR2015, Total-Text, and CTW1500 under one consistent end-to-end spotting setup. ([arXiv][1])
+
+---
+
+# A. ICDAR2015 current leaderboard
+
+**Dataset:** ICDAR2015 incidental scene text, **1,000 train / 500 test** images. It contains multi-oriented word-level text, usually evaluated under **Strong**, **Weak**, **Generic**, and sometimes **None** lexicon settings. TiCLS reports ICDAR2015 as 1000/500 and evaluates Strong/Weak/Generic/None. ([arXiv][1])
+
+## ICDAR2015 top 5, ranked by Generic lexicon Hmean
+
+| Rank | Paper / model                                    | Year |   Strong |     Weak |  Generic |     None | Model family                                                        | Code                         |                     Params |
+| ---: | ------------------------------------------------ | ---: | -------: | -------: | -------: | -------: | ------------------------------------------------------------------- | ---------------------------- | -------------------------: |
+|    1 | **TiCLS: Tightly Coupled Language Text Spotter** | 2026 | **90.1** | **85.4** | **81.9** | **79.1** | DETR-style visual spotter + pretrained scene-text PLM decoder       | Yes                          |                  **98.5M** |
+|    2 | **TextBlockV2**                                  | 2025 |        — |        — | **80.5** |        — | Text-block detector + pretrained language recognizer                | No clear official repo found |         Not fully reported |
+|    3 | **DeepSolo / DeepSolo++ family**                 | 2023 |     88.1 |     83.9 | **79.5** |     73.8 | DETR-style point-sequence text spotter                              | Yes                          |                  **36.0M** |
+|    4 | **SwinTextSpotter v2**                           | 2025 |     89.6 |     84.1 | **79.4** |        — | Swin + query detector + recognition alignment/conversion            | Yes                          | ~70.6M for 3-stage setting |
+|    5 | **LMTextSpotter**                                | 2024 |     87.5 |     83.4 | **78.4** |        — | DETR-like detector + CTC branch + language-model recognition branch | No clear official repo found |               Not reported |
+
+**Important ranking note:** TiCLS is not just slightly ahead on ICDAR2015. It is ahead on **Strong, Weak, Generic, and None** in the comparable table. SwinTextSpotter v2 is very strong under Strong/Weak, but TiCLS still wins in the listed TiCLS comparison. ([arXiv][1])
+
+---
+
+# B. Total-Text current leaderboard
+
+**Dataset:** Total-Text arbitrary-shaped English scene text benchmark, commonly reported with **1,255 train / 300 test** images. It is usually evaluated under **None / lexicon-free** and **Full lexicon** settings. ([arXiv][1])
+
+## Total-Text top 5, ranked by None / lexicon-free Hmean
+
+| Rank | Paper / model                    | Year |     None |     Full | Model family                                                         | Code                         |                     Params |
+| ---: | -------------------------------- | ---: | -------: | -------: | -------------------------------------------------------------------- | ---------------------------- | -------------------------: |
+|    1 | **TiCLS**                        | 2026 | **84.6** | **90.4** | DETR-style visual spotter + pretrained scene-text PLM decoder        | Yes                          |                  **98.5M** |
+|    2 | **DeepSolo / DeepSolo++ family** | 2023 | **83.6** | **89.6** | DETR-style explicit point-sequence spotter                           | Yes                          |                  **36.0M** |
+|    3 | **SwinTextSpotter v2**           | 2025 | **82.8** | **88.4** | Swin + query detector + recognition alignment/conversion             | Yes                          | ~70.6M for 3-stage setting |
+|    4 | **LMTextSpotter**                | 2024 | **81.1** | **88.4** | DETR-like visual spotter + language-model recognition branch         | No clear official repo found |               Not reported |
+|    5 | **ESTextSpotter**                | 2023 | **80.8** | **87.1** | Transformer text spotter with explicit detection-recognition synergy | Yes                          |               Not reported |
+
+**Near misses:** TextBlockV2 reports **80.0** lexicon-free, FastTCM reports **79.9 / 87.2**, and GLASS reports **79.9 / 86.2**. They are strong baselines but sit just below the top five by lexicon-free score in the strict table. ([arXiv][1])
+
+---
+
+# C. CTW1500 current leaderboard
+
+**Dataset:** CTW1500 curved text-line benchmark, commonly reported as **1,000 train / 500 test** images. CTW1500 is harder for lexicon-free spotting because curved long text lines make both localization and recognition more fragile. ([arXiv][1])
+
+## CTW1500 top 5, ranked by None / lexicon-free Hmean
+
+| Rank | Paper / model                    | Year |     None |     Full | Model family                                                         | Code                         |             Params |
+| ---: | -------------------------------- | ---: | -------: | -------: | -------------------------------------------------------------------- | ---------------------------- | -----------------: |
+|    1 | **TiCLS**                        | 2026 | **66.2** | **88.1** | DETR-style visual spotter + pretrained scene-text PLM decoder        | Yes                          |          **98.5M** |
+|    2 | **ESTextSpotter**                | 2023 | **66.0** | **83.6** | Transformer text spotter with explicit detection-recognition synergy | Yes                          |       Not reported |
+|    3 | **TextBlockV2**                  | 2025 | **65.1** | **83.3** | Text-block detector + pretrained language recognizer                 | No clear official repo found | Not fully reported |
+|    4 | **DeepSolo / DeepSolo++ family** | 2023 | **64.2** | **81.4** | DETR-style explicit point-sequence spotter                           | Yes                          |          **36.0M** |
+|    5 | **SPTS v2**                      | 2023 | **63.6** | **84.3** | Single-point annotation autoregressive text spotter                  | Yes                          |       Not reported |
+
+**CTW1500 caveat:** if you rank by **Full lexicon** instead of **None**, the order changes slightly because SPTS v2 reaches **84.3 Full**, above ESTextSpotter and TextBlockV2. But for a strong paper claim, **None / lexicon-free** is the more meaningful ranking. ([arXiv][1])
+
+---
+
+# D. Detailed model cards
+
+## 1. TiCLS: Tightly Coupled Language Text Spotter
+
+**Current position:**
+TiCLS is the current strongest cross-dataset end-to-end spotting model in the comparable table for **ICDAR2015, Total-Text, and CTW1500**. It reports **ICDAR2015 Generic 81.9**, **Total-Text None 84.6**, and **CTW1500 None 66.2**. ([arXiv][1])
+
+### Model type
+
+TiCLS is a **DETR-style end-to-end text spotter** with a tightly coupled **visual decoder + pretrained linguistic decoder**. The core idea is that the recognizer should not be a shallow character classifier. Instead, the model injects a **scene-text-specific pretrained language model** into the spotting pipeline. ([arXiv][1])
+
+### Backbone and components
+
+TiCLS has three main components:
+
+1. **Visual feature extractor**
+2. **Visual decoder**
+3. **Linguistic decoder**
+
+The paper describes the visual part as a DETR-style encoder-decoder and initializes the backbone, visual encoder, and visual decoder from **DeepSolo pretrained weights**. It removes DeepSolo’s original character classification head and adds a **visual-to-language projection module** before the linguistic decoder. ([arXiv][1])
+
+### Architecture details
+
+The architecture is:
+
+```text
+Image
+→ visual backbone / feature extractor
+→ DETR-style visual encoder
+→ visual decoder
+→ visual-to-language projection
+→ pretrained linguistic decoder
+→ autoregressive text recognition
+→ final text instances
+```
+
+The important change is that recognition is handled by a **linguistic decoder initialized from a pretrained language model**, not just by direct visual token classification. This is why TiCLS improves especially on lexicon-free settings, where the model cannot rely on test-time lexicons to correct recognition errors. ([arXiv][1])
+
+### Parameter count
+
+TiCLS reports **98.5M parameters**. For comparison, the paper says DeepSolo has **36.0M parameters**. TiCLS is therefore much heavier than DeepSolo but gives stronger recognition-aware spotting performance. ([arXiv][1])
+
+### Training details
+
+TiCLS uses:
+
+* **6-layer visual encoder**
+* **6-layer visual decoder**
+* Linguistic PLM with hidden size **768**
+* Feed-forward dimension **3072**
+* **6-layer PLM encoder + 6-layer PLM decoder**
+* **AdamW**
+* Step learning-rate schedule
+* Character-level vocabulary with **194 tokens**
+* PLM pretraining for **40 epochs**
+* PLM pretraining batch size **128**
+* TiCLS pretraining on **4 NVIDIA A100-SXM4-40GB GPUs**, batch size **4**
+* Target benchmark fine-tuning on **2 GPUs**, batch size **2** ([arXiv][1])
+
+### External / synthetic data
+
+TiCLS uses both synthetic and external data.
+
+For visual TiCLS training, it uses:
+
+* **SynthText 150K**
+* **ICDAR2013**
+* **TextOCR**
+* **ICDAR2017-MLT**, Latin annotations only
+
+For PLM pretraining, it uses text sequences from:
+
+* SynthText 150K
+* Total-Text
+* ICDAR2013
+* ICDAR2015
+* TextOCR
+* LSVT
+* ArT
+* SVT
+* IIIT5K
+* AG News
+* WikiText
+* OpenStreetMap point-of-interest names from Paris, Barcelona, and Beijing
+
+The final PLM corpus contains **932,905 unique text sequences**. ([arXiv][1])
+
+### Code availability
+
+The official GitHub repo is public and includes installation, training/evaluation commands, PLM training scripts, model weights, tokenizer, and dataset annotations. ([GitHub][2])
+
+### Why it is SOTA
+
+TiCLS wins because it directly attacks the weakest point in spotting: **recognition after imperfect detection**. Detection-only improvements saturate quickly, but lexicon-free spotting depends heavily on whether the recognizer can recover text from noisy, curved, cropped, or partially distorted visual regions. TiCLS makes the recognizer a language-aware decoder trained specifically for scene text.
+
+---
+
+## 2. SwinTextSpotter v2
+
+**Current position:**
+SwinTextSpotter v2 is a top-tier text spotter, especially on ICDAR2015 and Total-Text. It reports **ICDAR2015 Generic 79.4**, **Total-Text None 82.8**, and **CTW1500 None 61.3** in the comparable table. ([arXiv][1])
+
+### Model type
+
+SwinTextSpotter v2 is an **end-to-end text spotter** built around a **Swin Transformer backbone**, a query-based detector, and a recognition branch. It focuses on making detection and recognition interact more tightly. ([arXiv][3])
+
+### Backbone
+
+The model uses a **Swin Transformer** visual backbone. The paper specifically discusses a Swin-based architecture with feature maps at **1/4, 1/8, 1/16, and 1/32** scale for detection, and high-resolution **1/4** features for recognition. ([arXiv][3])
+
+### Architecture details
+
+Main components:
+
+1. **Swin Transformer backbone**
+2. **Box Selection Schedule**
+3. **Query-based detector**
+4. **Recognition Alignment**
+5. **Recognition Conversion**
+6. **Attention-based recognizer**
+
+The **Box Selection Schedule** reduces the need for many refinement stages by selecting high-quality proposal boxes from FPN features using NMS and top-K filtering. The query-based detector follows Sparse R-CNN / ISTR-style iterative refinement. ([arXiv][3])
+
+The two most important modules are:
+
+* **Recognition Alignment:** uses deformable convolution and convolution layers to dynamically sample text features guided by recognition loss.
+* **Recognition Conversion:** uses a transformer encoder and upsampling structures to inject detection features into the recognition branch, allowing recognition loss to improve detection features. ([arXiv][3])
+
+### Parameter count
+
+SwinTextSpotter v2 reports parameter counts by number of refinement stages:
+
+| Refinement stages |    Params |
+| ----------------: | --------: |
+|                 2 | **57.2M** |
+|                 3 | **70.6M** |
+|                 4 | **84.0M** |
+|                 6 | **97.4M** |
+
+The commonly referenced 3-stage setting is around **70.6M parameters**. ([arXiv][3])
+
+### Training details
+
+Reported training uses:
+
+* Batch size **8**
+* Multi-scale training from **640 to 896**
+* Random rotation
+* Random crop
+* Brightness, contrast, and saturation augmentation
+* Detection and recognition losses trained jointly ([arXiv][3])
+
+### External / synthetic data
+
+SwinTextSpotter v2 uses:
+
+* **Curved SynthText 150K**
+* **MLT17**
+* **ICDAR2013**
+* **ICDAR2015**
+* **Total-Text**
+* **CTW1500**
+* In stronger settings, **TextOCR** is also used
+
+The paper specifically reports a stronger Total-Text setting using **Synth150K + MLT17 + IC13 + IC15 + TextOCR**. ([arXiv][3])
+
+### Code availability
+
+A public PyTorch implementation exists, with dataset preparation and training/evaluation instructions for Total-Text, CTW1500, and ICDAR2015. ([GitHub][4])
+
+### Why it matters
+
+SwinTextSpotter v2 is very relevant to your work because it proves that **recognition-guided feature alignment** helps spotting. If your model has geometry/flow modules, this is one of the most important baselines to beat.
+
+---
+
+## 3. DeepSolo / DeepSolo++
+
+**Current position:**
+DeepSolo is still one of the strongest and cleanest baselines: **ICDAR2015 Generic 79.5**, **Total-Text None 83.6**, and **CTW1500 None 64.2**. ([arXiv][1])
+
+### Model type
+
+DeepSolo is a **DETR-like end-to-end text spotter**. Its main idea is extremely elegant: represent a text instance as an ordered sequence of points and recognize text directly from those point queries. ([arXiv][5])
+
+### Architecture details
+
+DeepSolo represents the center line and text sequence using explicit points. Its point queries decode:
+
+* center-line geometry
+* boundary geometry
+* script
+* confidence
+* character sequence
+
+It uses a **single decoder** and a **text-matching criterion** to align predictions with ground truth. ([arXiv][5])
+
+### Parameter count
+
+DeepSolo is reported by TiCLS as **36.0M parameters**, making it far lighter than TiCLS. ([arXiv][1])
+
+### Training and implementation
+
+DeepSolo is attractive because it avoids very complex segmentation pipelines. It follows the DETR-style formulation where text instances are predicted as a set of structured outputs rather than relying on heavy post-processing. The official repository is public and contains the DeepSolo / DeepSolo++ implementation. ([GitHub][6])
+
+### External / synthetic data
+
+DeepSolo-style methods are usually trained with synthetic and public real text datasets before target fine-tuning. In the comparable table, it is treated as a strong modern pretraining-based baseline. ([arXiv][1])
+
+### Why it matters
+
+DeepSolo is probably the most important “clean baseline” for your paper because it is:
+
+* strong,
+* relatively compact,
+* DETR-like,
+* geometry-aware,
+* public,
+* and much easier to compare against than large PLM-heavy systems.
+
+---
+
+## 4. TextBlockV2
+
+**Current position:**
+TextBlockV2 is especially strong on ICDAR2015 Generic and CTW1500 None. It reports **ICDAR2015 Generic 80.5**, **Total-Text None 80.0**, and **CTW1500 None 65.1**. ([arXiv][1])
+
+### Model type
+
+TextBlockV2 is a different style of text spotter. Instead of requiring precise word-level detection, it uses **text blocks** and lets a pretrained language model recognize text from those broader blocks. ([arXiv][7])
+
+### Backbone and architecture
+
+The architecture uses:
+
+1. **Text block detector**
+2. **Block cuttings**
+3. **Visual tokenization**
+4. **Pretrained language recognizer**
+
+The detector is based on **Mask R-CNN with ResNet-50 + FPN**. Detected block regions are resized, patched into visual tokens, and then passed into a pretrained language model recognizer such as **GPT2-Base** or **T5-Base**. ([arXiv][7])
+
+### Core idea
+
+The paper argues that precise detection is not always necessary. Instead of detecting every word perfectly, it detects a larger **text block** and lets the PLM handle:
+
+* multi-line text,
+* reversed text,
+* occluded text,
+* incomplete detection,
+* imperfect crops. ([arXiv][7])
+
+### Parameter count
+
+The full pipeline parameter count is **not clearly reported** in the checked sources. The model uses a Mask R-CNN ResNet-50-FPN detector and PLM recognizers such as GPT2-Base / T5-Base, so the real deployed parameter count depends on which recognizer version is used. ([arXiv][7])
+
+### Training data
+
+TextBlockV2 uses a large amount of synthetic and external data:
+
+* **Curved Synthetic 150K**
+* **Union14M-L**, around 4M labeled images
+* **SynthTiger-4M**, around 4M images
+* Real block data derived from ICDAR2015, Total-Text, and CTW1500 ([arXiv][7])
+
+### Training details
+
+The paper reports:
+
+* Detection implemented in **MMOCR**
+* Detection pretraining on Curved Synth 150K and real public sets
+* Fine-tuning detection on Real Blocks
+* Recognition warm-up on Union14M-L
+* Recognition pretraining with SynthTiger-4M
+* Final fine-tuning on RealBlock
+* Mixed precision training
+* NVIDIA RTX 3090 used in implementation ([arXiv][7])
+
+### Code availability
+
+I did not find a clearly official public code repo in the checked sources. Treat it as **paper-reported but not easily reproducible** unless an official repo appears.
+
+### Why it matters
+
+TextBlockV2 is important because it challenges the standard detector-first pipeline. It says: instead of making detection perfect, make the recognizer robust enough to read from imperfect blocks. This is highly relevant if your own architecture sometimes produces rough but semantically useful text regions.
+
+---
+
+## 5. LMTextSpotter
+
+**Current position:**
+LMTextSpotter reports **ICDAR2015 Generic 78.4**, **Total-Text None 81.1**, and **CTW1500 None 62.5**. ([arXiv][1])
+
+### Model type
+
+LMTextSpotter is a **DETR-like text spotter** that introduces language modeling into the spotting pipeline. It adds a language-model recognition branch in addition to the usual detection and CTC-style recognition components. ([Springer][8])
+
+### Architecture idea
+
+The model has:
+
+* detection branch,
+* CTC recognition branch,
+* extra language-model recognition branch.
+
+The language-model branch is trained autoregressively with cross-entropy. The key goal is to make the recognizer more context-aware than a standard CTC-only recognizer. ([Springer][8])
+
+### Parameter count
+
+Not reported in the checked sources.
+
+### Code availability
+
+I did not find a clearly official public implementation in the checked sources.
+
+### Training data
+
+TiCLS specifically contrasts itself with LMTextSpotter by noting that LMTextSpotter trains only on text from scene images, while TiCLS benefits from broader pretrained language priors. ([weinman.cs.grinnell.edu][9])
+
+### Why it matters
+
+LMTextSpotter is an important bridge between older visual-only spotters and newer PLM-coupled systems like TiCLS. It proves that adding language modeling helps, but TiCLS goes further by using a pretrained scene-text-specific PLM.
+
+---
+
+## 6. ESTextSpotter
+
+**Current position:**
+ESTextSpotter reports **ICDAR2015 Generic 78.1**, **Total-Text None 80.8**, and **CTW1500 None 66.0**. It is especially strong on CTW1500, where it is almost tied with TiCLS under None. ([arXiv][1])
+
+### Model type
+
+ESTextSpotter is a **Transformer-based end-to-end scene text spotter** built around explicit synergy between detection and recognition. ([arXiv][10])
+
+### Architecture idea
+
+Its main contribution is not just sharing features between detection and recognition. It explicitly creates interaction between the two tasks using:
+
+* task-aware query design,
+* detection-recognition interaction,
+* vision-language communication,
+* task-aware denoising.
+
+The goal is to make detection help recognition and recognition help detection, instead of treating recognition as a passive second-stage head. ([arXiv][10])
+
+### Backbone
+
+The paper uses a transformer-based spotting architecture. In common implementations, ESTextSpotter is associated with ResNet-50-style visual feature extraction and transformer decoding. The official repository provides training and evaluation code. ([GitHub][11])
+
+### Parameter count
+
+Not reported in the checked sources.
+
+### Training data
+
+The official implementation includes preparation for:
+
+* Total-Text
+* CTW1500
+* MLT
+* ICDAR2013
+* ICDAR2015
+* CurvedSynthText150K
+* MLT2019 ([GitHub][11])
+
+### Code availability
+
+Official code is public. The repo includes installation, dataset preparation, training, and evaluation commands. ([GitHub][11])
+
+### Why it matters
+
+For CTW1500, ESTextSpotter is a very serious baseline. Its **66.0 None** is almost equal to TiCLS’s **66.2 None**, although TiCLS is much stronger under Full lexicon. ([arXiv][1])
+
+---
+
+## 7. SPTS v2
+
+**Current position:**
+SPTS v2 is top-five on CTW1500 under lexicon-free ranking and very strong under Full lexicon: **CTW1500 None 63.6, Full 84.3**. ([arXiv][1])
+
+### Model type
+
+SPTS v2 is an **autoregressive scene text spotter** designed to work with **single-point annotations** rather than full polygon/box annotations. ([arXiv][12])
+
+### Architecture details
+
+SPTS v2 introduces:
+
+* **Instance Assignment Decoder**
+* **Parallel Recognition Decoder**
+* parameter sharing between decoders
+* information transmission between detection and recognition branches
+
+It is designed to reduce annotation cost while improving speed and parameter efficiency. ([arXiv][12])
+
+### Parameter count
+
+The paper claims fewer parameters than the previous SPTS-style model, but I did not find a reliable exact parameter count in the checked sources.
+
+### Code availability
+
+Official implementation is public. ([GitHub][13])
+
+### Why it matters
+
+SPTS v2 is not the strongest lexicon-free model overall, but it is important if you want to discuss **annotation efficiency**, **speed**, and **minimal geometry supervision**.
+
+---
+
+# E. Runners-up worth knowing
+
+These are not always top five under the strict primary ranking, but they are still important for your literature review.
+
+## FastTextSpotter
+
+FastTextSpotter uses a **Swin-Tiny visual backbone**, transformer encoder, and two decoders: one for text localization and one for recognition. It predicts point-character pairs and is designed to avoid heavy post-processing. It reports strong ICDAR2015 and CTW/Total-Text results while focusing on speed. ([arXiv][14])
+
+It has public code and pretrained model support. ([GitHub][15])
+
+## FastTCM / TCM
+
+TCM turns a CLIP model into a scene text spotter by using CLIP-based visual-language knowledge, visual prompt learning, cross-attention, instance-language matching, and bimodal similarity matching. FastTCM is a faster variant, but the checked official repo indicates TCM code is public while FastTCM support may not be fully completed in that repo. ([arXiv][16])
+
+## LSGSpotter caveat
+
+LSGSpotter reports very strong numbers for arbitrary reading-order spotting, but it is not directly mixed into the strict TiCLS Table 1 leaderboard because its evaluation focus and protocol framing can differ. It is still worth reading if your model handles irregular reading order or curved/rotated text. ([arXiv][17])
+
+---
+
+# F. Best comparison set for your paper
+
+For your project on **ICDAR2015 + Total-Text + CTW1500**, your comparison table should be split like this:
+
+## Primary end-to-end text spotting baselines
+
+| Priority | Model                     | Why include it                                                        |
+| -------: | ------------------------- | --------------------------------------------------------------------- |
+|        1 | **TiCLS**                 | Current strongest cross-dataset SOTA. Must beat or compare directly.  |
+|        2 | **DeepSolo / DeepSolo++** | Strong, public, compact, DETR-like baseline.                          |
+|        3 | **SwinTextSpotter v2**    | Strong recognition-alignment baseline.                                |
+|        4 | **ESTextSpotter**         | Very strong CTW1500 baseline; explicit detection-recognition synergy. |
+|        5 | **TextBlockV2**           | Strong PLM/block-based alternative; useful conceptual contrast.       |
+|        6 | **LMTextSpotter**         | Important language-model spotting baseline.                           |
+|        7 | **SPTS v2**               | Useful for speed and annotation-efficiency discussion.                |
+
+## Secondary / ablation baselines
+
+| Model                 | Use                                                   |
+| --------------------- | ----------------------------------------------------- |
+| **FastTextSpotter**   | Efficient spotting baseline                           |
+| **FastTCM / TCM**     | CLIP-based visual-language spotting baseline          |
+| **GLASS**             | Older strong arbitrary-shaped spotting model          |
+| **TESTR**             | Transformer baseline before DeepSolo/TiCLS generation |
+| **ABCNet v2 / MANGO** | Older curved-text spotting baselines                  |
+
+---
+
+# G. What you actually need to beat
+
+For a serious SOTA claim, these are the key numbers:
+
+| Dataset        |        Main setting | Current target to beat | Model |
+| -------------- | ------------------: | ---------------------: | ----- |
+| **ICDAR2015**  |     Generic lexicon |               **81.9** | TiCLS |
+| **ICDAR2015**  | None / lexicon-free |               **79.1** | TiCLS |
+| **Total-Text** | None / lexicon-free |               **84.6** | TiCLS |
+| **Total-Text** |        Full lexicon |               **90.4** | TiCLS |
+| **CTW1500**    | None / lexicon-free |               **66.2** | TiCLS |
+| **CTW1500**    |        Full lexicon |               **88.1** | TiCLS |
+
+So your clean target should be:
+
+```text
+ICDAR2015 Generic > 81.9
+ICDAR2015 None > 79.1
+Total-Text None > 84.6
+CTW1500 None > 66.2
+```
+
+The hardest one is likely **Total-Text None > 84.6**, because DeepSolo is already at **83.6** and TiCLS gains from a strong pretrained language decoder. For CTW1500, beating **66.2 None** is possible but requires excellent curved-line geometry and robust recognition.
+
+[1]: https://arxiv.org/html/2602.04030v1 "TiCLS: Tightly Coupled Language Text Spotter"
+[2]: https://github.com/knowledge-computing/TiCLS "GitHub - knowledge-computing/TiCLS: Code for WACV2026 paper “TiCLS: Tightly Coupled Language Text Spotter” · GitHub"
+[3]: https://arxiv.org/html/2401.07641v3 "SwinTextSpotter v2: Towards Better Synergy for Scene Text Spotting"
+[4]: https://github.com/mxin262/SwinTextSpotterv2 "GitHub - mxin262/SwinTextSpotterv2: Pytorch re-implementation of Paper: SwinTextSpotter v2: Towards Better Synergy for Scene Text Spotting  (IJCV 2025) · GitHub"
+[5]: https://arxiv.org/abs/2211.10772 "[2211.10772] DeepSolo: Let Transformer Decoder with Explicit Points Solo for Text Spotting"
+[6]: https://github.com/ViTAE-Transformer/DeepSolo "GitHub - ViTAE-Transformer/DeepSolo: The official repo for [CVPR'23] \"DeepSolo: Let Transformer Decoder with Explicit Points Solo for Text Spotting\" & [ArXiv'23] \"DeepSolo++: Let Transformer Decoder with Explicit Points Solo for Multilingual Text Spotting\" · GitHub"
+[7]: https://arxiv.org/html/2403.10047v1 "TextBlockV2: Towards Precise-Detection-Free Scene Text Spotting with Pre-trained Language Model"
+[8]: https://link.springer.com/chapter/10.1007/978-3-031-70549-6_5?utm_source=chatgpt.com "Towards Better Scene Text Spotting with Language Modeling ..."
+[9]: https://weinman.cs.grinnell.edu/pubs/jang26ticls.pdf?utm_source=chatgpt.com "TICLS: Tightly Coupled Language Text Spotter"
+[10]: https://arxiv.org/abs/2308.10147?utm_source=chatgpt.com "ESTextSpotter: Towards Better Scene Text Spotting with Explicit Synergy in Transformer"
+[11]: https://github.com/mxin262/ESTextSpotter "GitHub - mxin262/ESTextSpotter: (ICCV 2023) ESTextSpotter: Towards Better Scene Text Spotting with Explicit Synergy in  Transformer · GitHub"
+[12]: https://arxiv.org/abs/2301.01635?utm_source=chatgpt.com "SPTS v2: Single-Point Scene Text Spotting"
+[13]: https://github.com/bytedance/SPTSv2?utm_source=chatgpt.com "The official implementation of SPTS v2: Single-Point Text ..."
+[14]: https://arxiv.org/html/2408.14998v1 "FastTextSpotter: A High-Efficiency Transformer for Multilingual Scene Text Spotting"
+[15]: https://github.com/alloydas/fast-textspotter "GitHub - alloydas/Fast-Textspotter · GitHub"
+[16]: https://arxiv.org/abs/2308.10408?utm_source=chatgpt.com "Turning a CLIP Model into a Scene Text Spotter"
+[17]: https://arxiv.org/abs/2412.10159?utm_source=chatgpt.com "Arbitrary Reading Order Scene Text Spotter with Local Semantics Guidance"
+
+"""
+
