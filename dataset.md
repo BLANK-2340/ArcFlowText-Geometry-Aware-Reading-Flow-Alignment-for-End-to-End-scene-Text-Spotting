@@ -618,4 +618,4 @@ This local dataset package is suitable for a strong curved/incidental scene-text
 - ICDAR2015 gives fixed-resolution incidental text images with quadrilateral labels.
 
 The most important engineering decision is to build one robust manifest generator that keeps dataset-specific parsing separate but emits one unified schema for training.
-The most important engineering decision is to build one robust manifest generator that keeps dataset-specific parsing separate but emits one unified schema for training.
+
